@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>Выбор адреса</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; width: 100%; overflow: hidden; }
+        body {
+            display: flex; flex-direction: column;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: var(--tg-theme-bg-color, #fff);
+            color: var(--tg-theme-text-color, #000);
+        }
+        #map { flex: 1; width: 100%; z-index: 1; }
+        #panel {
+            padding: 12px 16px;
+            border-top: 1px solid var(--tg-theme-hint-color, #ccc);
+            background: var(--tg-theme-secondary-bg-color, #f5f5f5);
+            display: flex; flex-direction: column; gap: 8px;
+        }
+        #address {
+            font-size: 13px; color: var(--tg-theme-hint-color, #666);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        #comment {
+            width: 100%; padding: 10px 12px;
+            border: 1px solid var(--tg-theme-hint-color, #ccc);
+            border-radius: 8px; font-size: 14px; outline: none;
+            background: var(--tg-theme-bg-color, #fff);
+            color: var(--tg-theme-text-color, #000);
+        }
+        #confirm {
+            width: 100%; padding: 12px;
+            background: var(--tg-theme-button-color, #2ea6ff);
+            color: var(--tg-theme-button-text-color, #fff);
+            border: none; border-radius: 8px;
+            font-size: 15px; font-weight: 600; cursor: pointer;
+        }
+        #confirm:active { opacity: 0.8; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div id="panel">
+        <div id="address">📍 Переместите маркер в точку доставки</div>
+        <input id="comment" type="text" placeholder="Квартира, подъезд, домофон..." />
+        <button id="confirm">✅ Подтвердить адрес</button>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+        tg.expand();
+
+        const DEFAULT = [55.751244, 37.618423];
+
+        const map = L.map("map").setView(DEFAULT, 14);
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            attribution: "© OpenStreetMap",
+            maxZoom: 19,
+        }).addTo(map);
+
+        let marker = L.marker(DEFAULT, { draggable: true }).addTo(map);
+        let chosen = { lat: DEFAULT[0], lng: DEFAULT[1], text: "" };
+
+        async function reverseGeo(lat, lng) {
+            try {
+                const res = await fetch(
+                    `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=ru`
+                );
+                const data = await res.json();
+                return data.display_name || `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+            } catch {
+                return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+            }
+        }
+
+        async function updateAddress(lat, lng) {
+            chosen.lat = lat; chosen.lng = lng;
+            document.getElementById("address").textContent = "📍 " + await reverseGeo(lat, lng);
+        }
+
+        marker.on("dragend", () => {
+            const pos = marker.getLatLng();
+            updateAddress(pos.lat, pos.lng);
+        });
+
+        map.on("click", (e) => {
+            marker.setLatLng(e.latlng);
+            updateAddress(e.latlng.lat, e.latlng.lng);
+        });
+
+        updateAddress(DEFAULT[0], DEFAULT[1]);
+
+        document.getElementById("confirm").onclick = () => {
+            chosen.text = document.getElementById("comment").value.trim();
+            tg.sendData(JSON.stringify(chosen));
+        };
+    </script>
+</body>
+</html>
